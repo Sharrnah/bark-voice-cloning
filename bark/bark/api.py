@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Union, Dict
 
 import numpy as np
 
@@ -10,6 +10,7 @@ def text_to_semantic(
     history_prompt: Optional[str] = None,
     temp: float = 0.7,
     silent: bool = False,
+    min_eos_p: float = 0.05,
 ):
     """Generate semantic array from text.
 
@@ -18,6 +19,7 @@ def text_to_semantic(
         history_prompt: history choice for audio cloning
         temp: generation temperature (1.0 more diverse, 0.0 more conservative)
         silent: disable progress bar
+        min_eos_p: controls how likely the generation is to end
 
     Returns:
         numpy semantic array to be fed into `semantic_to_waveform`
@@ -26,6 +28,7 @@ def text_to_semantic(
         text,
         history_prompt=history_prompt,
         temp=temp,
+        min_eos_p=min_eos_p,
         silent=silent,
         use_kv_caching=True
     )
@@ -74,6 +77,28 @@ def semantic_to_waveform(
     return audio_arr
 
 
+def semantic_to_audio_tokens(
+        semantic_tokens: np.ndarray,
+        history_prompt: Optional[Union[Dict, str]] = None,
+        temp: float = 0.7,
+        silent: bool = False,
+        output_full: bool = False,
+):
+    coarse_tokens = generate_coarse(
+        semantic_tokens, history_prompt=history_prompt, temp=temp, silent=silent, use_kv_caching=True
+    )
+    fine_tokens = generate_fine(coarse_tokens, history_prompt=history_prompt, temp=0.5)
+
+    if output_full:
+        full_generation = {
+            "semantic_prompt": semantic_tokens,
+            "coarse_prompt": coarse_tokens,
+            "fine_prompt": fine_tokens,
+        }
+        return full_generation
+    return fine_tokens
+
+
 def save_as_prompt(filepath, full_generation):
     assert(filepath.endswith(".npz"))
     assert(isinstance(full_generation, dict))
@@ -88,6 +113,7 @@ def generate_audio(
     history_prompt: Optional[str] = None,
     text_temp: float = 0.7,
     waveform_temp: float = 0.7,
+    min_eos_p: float = 0.05,
     silent: bool = False,
     output_full: bool = False,
 ):
@@ -98,6 +124,7 @@ def generate_audio(
         history_prompt: history choice for audio cloning
         text_temp: generation temperature (1.0 more diverse, 0.0 more conservative)
         waveform_temp: generation temperature (1.0 more diverse, 0.0 more conservative)
+        min_eos_p: controls how likely the generation is to end (lower = earlier?)
         silent: disable progress bar
         output_full: return full generation to be used as a history prompt
 
@@ -108,6 +135,7 @@ def generate_audio(
         text,
         history_prompt=history_prompt,
         temp=text_temp,
+        min_eos_p=min_eos_p,
         silent=silent,
     )
     out = semantic_to_waveform(
